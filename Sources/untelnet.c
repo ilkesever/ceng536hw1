@@ -6,9 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define SADDRESS     "./mysocket22" 
-
-#define BUF_SIZE 1024
+#define SADDRESS     "./mysocket3" 
 
 int main(int argc, char *argv[])
 {
@@ -17,8 +15,8 @@ int main(int argc, char *argv[])
 	register int i, s, len;
 	struct sockaddr_un saun;
 	fd_set readset;
-	int selres, nread;
-	char line[BUF_SIZE];
+	int selres;
+	char line[1024];
 
 	/*
 	 * Get a socket to work with.  This socket will
@@ -53,25 +51,29 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	while (1 ==1) {
-		fgets(line,1024,stdin);
-		nread=send(s,line,strlen(line)+1,0);
-
-		if (nread<0)
-			perror("writing:");
-		else if(strcmp(line, "quit\n") == 0)
-			break;
-		else 			
-			printf("wrote: %d bytes, %s\n",nread,line);
-
-		nread=recv(s,line,BUF_SIZE,0);
-    	printf("received: len=%d, content=%s\n",
-		            	nread,line);
-		if (nread<0)
-			break;
+	/*fcntl(s,F_SETFL,O_NONBLOCK);*/
+	FD_ZERO(&readset);
+		FD_SET(0,&readset);
+		FD_SET(s,&readset);
+	while (selres=select(s+1,&readset,NULL,NULL,NULL)) {
+		if (selres<0) {
+			perror("select");
+			return -2;
+		}
+		if (FD_ISSET(s,&readset)) {
+			len=read(s,line,1024);
+			if (len==0) return -1;
+			write(1,line,len);
+		}
+		if (FD_ISSET(0,&readset)) {
+			fgets(line,1024,stdin);
+			write(s,line,strnlen(line,1024));
+		}
+		FD_ZERO(&readset);
+		FD_SET(0,&readset);
+		FD_SET(s,&readset);
+		/*printf("selecting\n");*/
 	}
-
-
 	/*
 	 * We can simply use close() to terminate the
 	 * connection, since we're done with both sides.

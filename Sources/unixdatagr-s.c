@@ -6,18 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <signal.h>
-#include <sys/wait.h>
 
-#define ADDRESS     "./mysocket22"  /* addr to connect */
+#define ADDRESS     "./mysocket"  /* addr to connect */
 
 #define BUF_SIZE 1024
-
-void childwait(int p) {
-	int stat;
-	wait(&stat);
-	signal(SIGCHLD,childwait);
-}
 
 
 void servecommand(char *buf) {
@@ -37,7 +29,7 @@ int main()
     char c;
     FILE *fp;
     int fromlen;
-    int i,j, s, nread, len,plen,ns;
+    int i,j, s, nread, len,plen;
     struct sockaddr_un saun;
     struct sockaddr_un paun;
     char buf[BUF_SIZE];
@@ -47,7 +39,7 @@ int main()
      * be in the UNIX domain, and will be a
      * stream socket.
      */
-    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+    if ((s = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
         perror("server: socket");
         exit(1);
     }
@@ -58,44 +50,41 @@ int main()
     saun.sun_family = AF_UNIX;
     strcpy(saun.sun_path, ADDRESS);
 
-    /*unlink(ADDRESS);*/
-    plen=len = sizeof(struct sockaddr_un);
+    /*
+     * Try to bind the address to the socket.  We
+     * unlink the name first so that the bind won't
+     * fail.
+     *
+     * The third argument indicates the "length" of
+     * the structure, not just the length of the
+     * socket name.
+     */
+    unlink(ADDRESS);
+    len = sizeof(struct sockaddr_un);
 
     if (bind(s, (struct sockaddr *)&saun, len) < 0) {
         perror("server: bind");
         exit(1);
     }
 
-    ns=listen(s,10);
-    if (ns<0) {
-    	perror("server: listen");
-		exit(1);
-    }
-
-	signal(SIGCHLD,childwait);
-
-    while ((ns=accept(s,(struct sockaddr *)&paun,&plen))>=0) {
-	    printf("accepted peer address: len=%d, fam=%d, path=%s\n",
-			            plen,paun.sun_family, paun.sun_path);
-
-		if (fork())
+    for (;;) {
+    	plen=len;
+		nread = recvfrom(s,buf, BUF_SIZE, 0, 
+			(struct sockaddr *) &paun, &plen);
+		if (nread<0) {
+			perror("receive");
 			continue;
-		/* Following is the service process code 
-		 * with connection established           */
-		while (1) {
-			nread=recv(ns,buf,BUF_SIZE,0);
-	    	printf("received: len=%d, content=%s\n",
-			            	nread,buf);
-			if (nread<0)
-				return(1);
-			servecommand(buf);
-			nread=send(ns,buf,strlen(buf)+1,0);
-			if (nread<0)
-				perror("writing:");
-			else 			
-				printf("wrote: %d bytes, %s\n",nread,buf);
 		}
+		printf("peer address: len=%d, fam=%d, path=%s\n",
+			plen,paun.sun_family, paun.sun_path);
+		printf("peer request: size=%d, content=%s\n", nread, buf);
+		servecommand(buf);
+		sendto(s,buf,strlen(buf)+1,0,
+			(struct sockaddr *) &paun,plen);
 	}
+	    
+	    
+
 
     close(s);
 

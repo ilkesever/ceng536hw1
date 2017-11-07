@@ -9,7 +9,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-#define ADDRESS     "./mysocket22"  /* addr to connect */
+#define ADDRESS     "./mysocket3"  /* addr to connect */
 
 #define BUF_SIZE 1024
 
@@ -95,6 +95,7 @@ int main()
 			else 			
 				printf("wrote: %d bytes, %s\n",nread,buf);
 		}
+		return 0;
 	}
 
     close(s);
