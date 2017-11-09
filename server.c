@@ -12,7 +12,7 @@
 #include<sys/shm.h>
 #include <stdbool.h>
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 256
 
 void childwait(int p) {
 	int stat;
@@ -28,17 +28,59 @@ bool startsWith(char *pre, char *str)
 //ornek
 //strncpy(buf,ctime(&now),BUF_SIZE);
 char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, int maxnmess, int maxtotmesslen, char *out) {
+	printf("***************************************************************\n");
+	for (int i = 0; i < maxtotmesslen; ++i)
+	{
+		printf("%c - ",messages[i] );
+	}
+	printf("***************************************************************\n");
+
 	if(startsWith("SEND",buf)) 
 	{
-		out = (char *) malloc(sizeof(char) * 100);
 		strcpy(buf, buf + 5);
 
-		int baslangicIndex = indexes[(*currentIndex)%maxnmess];
+		int baslangicIndex = indexes[*currentIndex];
 		int sonIndex = baslangicIndex + strlen(buf);
-		
-		indexes[((*currentIndex)+1)%maxnmess] = sonIndex;
 
-		strcpy(messages+baslangicIndex, buf);
+		if((*currentIndex) == maxnmess || sonIndex > maxtotmesslen){
+			baslangicIndex = 0;
+			(*currentIndex) = 0;
+			sonIndex = strlen(buf);
+		}
+
+		int tmpIndex = *currentIndex + 1;
+		if(!indexes[tmpIndex]){
+			indexes[tmpIndex] = sonIndex;
+		}
+		if(indexes[tmpIndex] == baslangicIndex + strlen(buf)){
+			;
+		}
+		else if(indexes[tmpIndex] > baslangicIndex + strlen(buf))
+		{
+			memset(messages + baslangicIndex, 0, indexes[tmpIndex] - indexes[tmpIndex-1]);
+		}
+		else if(indexes[tmpIndex] < baslangicIndex + strlen(buf))
+		{
+			while(indexes[tmpIndex] && indexes[tmpIndex] < baslangicIndex + strlen(buf)){			
+				indexes[tmpIndex] = baslangicIndex + strlen(buf);
+				tmpIndex += 1;
+			}
+			for (int i = maxnmess; i > (*currentIndex) + 1; i--)
+			{
+				if(indexes[i] == baslangicIndex + strlen(buf)){
+					if(indexes[i+1]){
+						indexes[i] = indexes[i+1];
+						indexes[i+1] = 0;
+					}
+					else{
+						indexes[i] = 0;
+					}
+				}
+			}
+			memset(messages + baslangicIndex, 0, indexes[(*currentIndex)+1] - indexes[(*currentIndex)-1]);
+		}
+
+		strncpy(messages+baslangicIndex, buf, strlen(buf));
 
 		*currentIndex += 1;
 		strcpy(out, "<ok>");
@@ -47,41 +89,30 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 	{
 		strcpy(buf, buf + 5);
 		int lastCount = atoi(buf);
-		if(lastCount == 0) lastCount = maxnmess;
+		if(lastCount == 0 || lastCount >= maxnmess) lastCount = maxnmess;
 
-		int sonIndex = indexes[(*currentIndex)%maxnmess];
-		int baslangicIndex = indexes[((*currentIndex) - lastCount)%maxnmess];
+		int sonIndex = indexes[*currentIndex];
 
-		printf("son index = %d\n", sonIndex);
-		printf("baslangic index = %d\n", baslangicIndex);
+		int basIndexYeri = (*currentIndex) - lastCount;
+		if(basIndexYeri<0) basIndexYeri = maxnmess + basIndexYeri;
 
-		if(sonIndex > baslangicIndex){
-			out = (char *) malloc(sizeof(char) * (sonIndex - baslangicIndex));
-			strncpy(buf, messages+baslangicIndex, sonIndex - baslangicIndex);
-			printf("-------------------\n");
-			printf("%s",buf);
-			printf("-------------------\n");
+		out = (char *) realloc(out,maxtotmesslen);
+
+		for (int i = 0; i < lastCount; i++)
+		{
+			strncat(out, messages+indexes[basIndexYeri],indexes[basIndexYeri+1]-indexes[basIndexYeri] );
+			basIndexYeri += 1;
+			if(basIndexYeri == maxnmess){
+				basIndexYeri = 0;
+			}
 		}
-		else{
-			printf(" ELSEEEEEEEEEEEEEEEEE\n");
-			char * firstPart = (char *) malloc(sizeof(char) *(maxtotmesslen - baslangicIndex + 1));
-			strncpy(firstPart, messages+baslangicIndex, maxtotmesslen - baslangicIndex);
-
-			char * secondPart = (char *) malloc(sizeof(char) *(sonIndex+1));
-			strncpy(secondPart, messages, sonIndex);
-			
-			out = (char *) malloc(1 + strlen(firstPart)+ strlen(secondPart) );
-			strcpy(out, firstPart);
-			strcat(out, secondPart);
-			free(firstPart);
-			free(secondPart);
-		}
-		printf("LAST COUNT = %d \n",lastCount);
+	}
+	else if(startsWith("BYE",buf))
+	{
+		strncpy(out,"BYE\n",BUF_SIZE);
 	}
 	else
 	{
-		printf("************\n");
-		out = (char *) malloc(sizeof(char) * 100);
 		printf("************\n");
 		strncpy(out,"NOT SUPPORTED YET",BUF_SIZE);
 		printf("************\n");
@@ -93,13 +124,11 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 	}
 	printf("\n-------------------\n");
 
-/*
-	char * subMes = (char *) malloc(sizeof(char) * 100);
-	printf("-------------------\n");
-	strncpy(subMes, messages,100);
-	printf("%s",subMes);
-	printf("-------------------\n");
-*/	
+
+	printf("///////////////////\n");
+	printf("%s",out);
+	printf("///////////////////\n");
+
 	return out;
 }
 	
@@ -127,6 +156,8 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 		exit(-1);
 	}
 
+
+
 	while (1) {		
 		memset(buf, 0, sizeof buf);
 		nread=recv(sockfd,buf,BUF_SIZE,0);
@@ -135,23 +166,29 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 
 		if (nread<0)
 			break;
-		else if(strcmp(buf, "quit\n") == 0){
-			send(sockfd,buf,strlen(buf)+1,0);
-			break;
-		}
+		
 
 		char * out;
+		out = (char *) malloc(sizeof(char) * BUF_SIZE);
 
 		servecommand(buf, indexes, messages, currentIndex, maxnmess, maxtotmesslen, out);
 
-		free(out);
-
 		nread=send(sockfd,out,strlen(out)+1,0);
-
-		if (nread<0)
+		printf("11111111111111111111111\n");
+		if (nread<0){
+			printf("2222222222222\n");
 			perror("writing:");
-		else 			
+		}
+		else if(strcmp(out, "BYE\n") == 0)
+		{
+			printf("33333333333333\n");
+			send(sockfd,out,strlen(out)+1,0);
+			break;
+		}
+		else{
+			printf("44444444444444\n");
 			printf("wrote: %d bytes, %s\n",nread,out);
+		} 			
 	}
 	close(sockfd);
 	return;
@@ -159,13 +196,9 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 
 int main(int argc, char *argv[])
 {
-    char c;
-    FILE *fp;
-    int fromlen;
-    int i,j, s, nread, len,plen,ns;
+    int s, len,plen,ns;
     struct sockaddr_un saun;
     struct sockaddr_un paun;
-    char buf[BUF_SIZE];
 
 	if(argc != 4){
 		printf("Unknown usage. Usage : './messboard maxnmess maxtotmesslen address' \n");
@@ -232,8 +265,9 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
+
 	printf("agent closed \n");
-	wait(NULL);
+
     close(s);
 
     exit(0);

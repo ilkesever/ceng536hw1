@@ -9,7 +9,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-#define BUF_SIZE 1024
+#define BUF_SIZE 256
+#define BUF_SIZE2 8192
 
 int main(int argc, char *argv[])
 {
@@ -20,6 +21,7 @@ int main(int argc, char *argv[])
 	fd_set readset;
 	int selres, nread;
 	char line[BUF_SIZE];
+	char line2[BUF_SIZE2];
 
 	if(argc != 2){
 		printf("Unknown usage. Usage : './client address' \n");
@@ -68,7 +70,7 @@ int main(int argc, char *argv[])
 
 			if (nread<0)
 				perror("writing:");
-			else if(strcmp(line, "quit\n") == 0)
+			else if(strcmp(line, "BYE\n") == 0)
 				break;
 			else 			
 				printf("wrote: %d bytes, %s\n",nread,line);
@@ -77,12 +79,12 @@ int main(int argc, char *argv[])
 	else
 	{
 		while (1 == 1) {
-			nread=recv(s,line,BUF_SIZE,0);
+			nread=recv(s,line2,BUF_SIZE2,0);
 	    	printf("received: len=%d, content=%s\n",
-			            	nread,line);
+			            	nread,line2);
 			if (nread<0)
 				break;
-			else if(strcmp(line, "quit\n") == 0)
+			else if(strcmp(line2, "BYE\n") == 0)
 				break;
 		}
 	}
@@ -90,7 +92,6 @@ int main(int argc, char *argv[])
 	 * We can simply use close() to terminate the
 	 * connection, since we're done with both sides.
 	 */
-	wait(NULL);
 	close(s);
 
 	exit(0);
