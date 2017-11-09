@@ -11,8 +11,11 @@
 #include<sys/ipc.h>
 #include<sys/shm.h>
 #include <stdbool.h>
+#include <semaphore.h>
+#include <fcntl.h>
 
 #define BUF_SIZE 256
+#define SNAME "/mysem"
 
 void childwait(int p) {
 	int stat;
@@ -52,7 +55,7 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 		if(!indexes[tmpIndex]){
 			indexes[tmpIndex] = sonIndex;
 		}
-		if(indexes[tmpIndex] == baslangicIndex + strlen(buf)){
+		else if(indexes[tmpIndex] == baslangicIndex + strlen(buf)){
 			;
 		}
 		else if(indexes[tmpIndex] > baslangicIndex + strlen(buf))
@@ -157,7 +160,8 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 	}
 
 
-
+	sem_t *sem = sem_open(SNAME, 0);
+	
 	while (1) {		
 		memset(buf, 0, sizeof buf);
 		nread=recv(sockfd,buf,BUF_SIZE,0);
@@ -170,23 +174,20 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 
 		char * out;
 		out = (char *) malloc(sizeof(char) * BUF_SIZE);
-
+		sem_wait(sem);
 		servecommand(buf, indexes, messages, currentIndex, maxnmess, maxtotmesslen, out);
+		sem_post(sem);
 
 		nread=send(sockfd,out,strlen(out)+1,0);
-		printf("11111111111111111111111\n");
 		if (nread<0){
-			printf("2222222222222\n");
 			perror("writing:");
 		}
 		else if(strcmp(out, "BYE\n") == 0)
 		{
-			printf("33333333333333\n");
 			send(sockfd,out,strlen(out)+1,0);
 			break;
 		}
 		else{
-			printf("44444444444444\n");
 			printf("wrote: %d bytes, %s\n",nread,out);
 		} 			
 	}
@@ -200,6 +201,7 @@ int main(int argc, char *argv[])
     struct sockaddr_un saun;
     struct sockaddr_un paun;
 
+
 	if(argc != 4){
 		printf("Unknown usage. Usage : './messboard maxnmess maxtotmesslen address' \n");
 		return 0;
@@ -208,6 +210,9 @@ int main(int argc, char *argv[])
 	char* address = argv[3];
 	int maxnmess = strtol(argv[1], NULL, 10);
 	int maxtotmesslen = strtol(argv[2], NULL, 10);
+
+	sem_t *sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
+	sem_init(sem, 0, 1);
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         perror("server: socket");
