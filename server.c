@@ -30,18 +30,13 @@ bool startsWith(char *pre, char *str)
 void servecommand(char *buf, int *indexes, char *messages, int *currentIndex) {
 	if(startsWith("SEND",buf)) 
 	{
-		// bunde her yeni mesajda follow edilen kelime varmı diye kontrol edilip diğer
-		// agent lar uyarılmalı
+		strcpy(buf, buf + 5);
+
 		int baslangicIndex = indexes[(*currentIndex)];
-		int sonIndex = baslangicIndex + strlen(buf) - 1;
+		int sonIndex = baslangicIndex + strlen(buf);
 		indexes[(*currentIndex)+1] = sonIndex;
 
-		int j = 5;
-
-		for(int i = baslangicIndex; i<sonIndex; i ++){
-			messages[i] = buf[j];
-			j++;
-		}
+		strcpy(messages+baslangicIndex, buf);
 
 		*currentIndex += 1;
 	}
@@ -61,8 +56,12 @@ void servecommand(char *buf, int *indexes, char *messages, int *currentIndex) {
 	printf("\n");
 
 	char subMes[100];
-	strncpy(subMes,messages,100);
-	printf("%s",subMes);
+	printf("\n");
+	for(int l = 0; l<100; l ++){
+		printf("%c",messages[l]);
+	}
+//	strncpy(subMes,messages,100);
+//	printf("%s",subMes);
 
 	printf("\n");
 }
@@ -91,6 +90,7 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 	}
 
 	while (1) {		
+		memset(buf, 0, sizeof buf);
 		nread=recv(sockfd,buf,BUF_SIZE,0);
     	printf("received: len=%d, content=%s\n",
 		            	nread,buf);
