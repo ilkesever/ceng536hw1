@@ -27,47 +27,85 @@ bool startsWith(char *pre, char *str)
 
 //ornek
 //strncpy(buf,ctime(&now),BUF_SIZE);
-void servecommand(char *buf, int *indexes, char *messages, int *currentIndex) {
+char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, int maxnmess, int maxtotmesslen, char *out) {
 	if(startsWith("SEND",buf)) 
 	{
+		out = (char *) malloc(sizeof(char) * 100);
 		strcpy(buf, buf + 5);
 
-		int baslangicIndex = indexes[(*currentIndex)];
+		int baslangicIndex = indexes[(*currentIndex)%maxnmess];
 		int sonIndex = baslangicIndex + strlen(buf);
-		indexes[(*currentIndex)+1] = sonIndex;
+		
+		indexes[((*currentIndex)+1)%maxnmess] = sonIndex;
 
 		strcpy(messages+baslangicIndex, buf);
 
 		*currentIndex += 1;
+		strcpy(out, "<ok>");
 	}
 	else if(startsWith("LAST",buf))
 	{
+		strcpy(buf, buf + 5);
+		int lastCount = atoi(buf);
+		if(lastCount == 0) lastCount = maxnmess;
 
+		int sonIndex = indexes[(*currentIndex)%maxnmess];
+		int baslangicIndex = indexes[((*currentIndex) - lastCount)%maxnmess];
+
+		printf("son index = %d\n", sonIndex);
+		printf("baslangic index = %d\n", baslangicIndex);
+
+		if(sonIndex > baslangicIndex){
+			out = (char *) malloc(sizeof(char) * (sonIndex - baslangicIndex));
+			strncpy(buf, messages+baslangicIndex, sonIndex - baslangicIndex);
+			printf("-------------------\n");
+			printf("%s",buf);
+			printf("-------------------\n");
+		}
+		else{
+			printf(" ELSEEEEEEEEEEEEEEEEE\n");
+			char * firstPart = (char *) malloc(sizeof(char) *(maxtotmesslen - baslangicIndex + 1));
+			strncpy(firstPart, messages+baslangicIndex, maxtotmesslen - baslangicIndex);
+
+			char * secondPart = (char *) malloc(sizeof(char) *(sonIndex+1));
+			strncpy(secondPart, messages, sonIndex);
+			
+			out = (char *) malloc(1 + strlen(firstPart)+ strlen(secondPart) );
+			strcpy(out, firstPart);
+			strcat(out, secondPart);
+			free(firstPart);
+			free(secondPart);
+		}
+		printf("LAST COUNT = %d \n",lastCount);
 	}
 	else
 	{
-		strncpy(buf,"NOT SUPPORTED YET",BUF_SIZE);
+		printf("************\n");
+		out = (char *) malloc(sizeof(char) * 100);
+		printf("************\n");
+		strncpy(out,"NOT SUPPORTED YET",BUF_SIZE);
+		printf("************\n");
 	}
 
-	printf("\n");
+	printf("-------------------\n");
 	for(int k = 0; k<10; k ++){
 		printf("%d -",indexes[k]);
 	}
-	printf("\n");
+	printf("\n-------------------\n");
 
-	char subMes[100];
-	printf("\n");
-	for(int l = 0; l<100; l ++){
-		printf("%c",messages[l]);
-	}
-//	strncpy(subMes,messages,100);
-//	printf("%s",subMes);
-
-	printf("\n");
+/*
+	char * subMes = (char *) malloc(sizeof(char) * 100);
+	printf("-------------------\n");
+	strncpy(subMes, messages,100);
+	printf("%s",subMes);
+	printf("-------------------\n");
+*/	
+	return out;
 }
 	
 void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentIndex, int sockfd, int maxnmess, int maxtotmesslen){
-	char buf[BUF_SIZE];
+	char * buf;
+	buf = (char *) malloc(BUF_SIZE);
 	int nread;
 
 	int *indexes;
@@ -102,14 +140,18 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 			break;
 		}
 
-		servecommand(buf, indexes, messages, currentIndex);
+		char * out;
 
-		nread=send(sockfd,buf,strlen(buf)+1,0);
+		servecommand(buf, indexes, messages, currentIndex, maxnmess, maxtotmesslen, out);
+
+		free(out);
+
+		nread=send(sockfd,out,strlen(out)+1,0);
 
 		if (nread<0)
 			perror("writing:");
 		else 			
-			printf("wrote: %d bytes, %s\n",nread,buf);
+			printf("wrote: %d bytes, %s\n",nread,out);
 	}
 	close(sockfd);
 	return;
