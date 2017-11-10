@@ -43,34 +43,40 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 		strcpy(buf, buf + 5);
 
 		int baslangicIndex = indexes[*currentIndex];
-		int sonIndex = baslangicIndex + strlen(buf);
+		int sonIndex = baslangicIndex + strlen(buf)-1;
 
 		if((*currentIndex) == maxnmess || sonIndex > maxtotmesslen){
 			baslangicIndex = 0;
 			(*currentIndex) = 0;
-			sonIndex = strlen(buf);
+			sonIndex = strlen(buf)-1;
 		}
 
 		int tmpIndex = *currentIndex + 1;
+		printf("***************************************************************\n");
+		printf("***************************************************************\n");
+		printf("%d\n",indexes[tmpIndex]);
+		printf("%d\n",sonIndex);
+		printf("***************************************************************\n");
+		printf("***************************************************************\n");
 		if(!indexes[tmpIndex]){
 			indexes[tmpIndex] = sonIndex;
 		}
-		else if(indexes[tmpIndex] == baslangicIndex + strlen(buf)){
+		else if(indexes[tmpIndex] == sonIndex){
 			;
 		}
-		else if(indexes[tmpIndex] > baslangicIndex + strlen(buf))
+		else if(indexes[tmpIndex] > sonIndex)
 		{
 			memset(messages + baslangicIndex, 0, indexes[tmpIndex] - indexes[tmpIndex-1]);
 		}
-		else if(indexes[tmpIndex] < baslangicIndex + strlen(buf))
+		else if(indexes[tmpIndex] < sonIndex)
 		{
 			while(indexes[tmpIndex] && indexes[tmpIndex] < baslangicIndex + strlen(buf)){			
-				indexes[tmpIndex] = baslangicIndex + strlen(buf);
+				indexes[tmpIndex] = sonIndex;
 				tmpIndex += 1;
 			}
 			for (int i = maxnmess; i > (*currentIndex) + 1; i--)
 			{
-				if(indexes[i] == baslangicIndex + strlen(buf)){
+				if(indexes[i] == sonIndex){
 					if(indexes[i+1]){
 						indexes[i] = indexes[i+1];
 						indexes[i+1] = 0;
@@ -80,10 +86,20 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 					}
 				}
 			}
-			memset(messages + baslangicIndex, 0, indexes[(*currentIndex)+1] - indexes[(*currentIndex)-1]);
+			printf("%c\n",*(messages + baslangicIndex));
+			printf("%d\n",baslangicIndex);
+			printf("%d\n",(*currentIndex));
+			printf("%d\n",indexes[(*currentIndex)+2]);
+			printf("%d\n",indexes[(*currentIndex)]);
+			if(indexes[(*currentIndex)+2] == 0){
+				memset(messages + baslangicIndex, 0, maxtotmesslen - baslangicIndex);
+			}
+			else{
+				memset(messages + baslangicIndex, 0, indexes[(*currentIndex)+2] - indexes[(*currentIndex)]);
+			}
 		}
 
-		strncpy(messages+baslangicIndex, buf, strlen(buf));
+		strncpy(messages+baslangicIndex, buf, strlen(buf)-1);
 
 		*currentIndex += 1;
 		strcpy(out, "<ok>\n");
@@ -100,10 +116,19 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 		if(basIndexYeri<0) basIndexYeri = maxnmess + basIndexYeri;
 
 		out = (char *) realloc(out,maxtotmesslen);
+		memset(out, 0, sizeof out);
 
 		for (int i = 0; i < lastCount; i++)
 		{
 			strncat(out, messages+indexes[basIndexYeri],indexes[basIndexYeri+1]-indexes[basIndexYeri] );
+			if(((*out)+ strlen(out) )){
+				printf("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n");
+				printf("%c\n", (*out)+ strlen(out) );
+				printf("%c\n", (*out) );
+				printf("%d\n", strlen(out) );
+				printf("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n");
+				strcat(out, "\n");
+			}
 			basIndexYeri += 1;
 			if(basIndexYeri == maxnmess){
 				basIndexYeri = 0;
