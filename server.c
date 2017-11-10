@@ -70,7 +70,7 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 		}
 		else if(indexes[tmpIndex] < sonIndex)
 		{
-			while(indexes[tmpIndex] && indexes[tmpIndex] < baslangicIndex + strlen(buf)){			
+			while(indexes[tmpIndex] && indexes[tmpIndex] < sonIndex){			
 				indexes[tmpIndex] = sonIndex;
 				tmpIndex += 1;
 			}
@@ -91,7 +91,7 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 			printf("%d\n",(*currentIndex));
 			printf("%d\n",indexes[(*currentIndex)+2]);
 			printf("%d\n",indexes[(*currentIndex)]);
-			if(indexes[(*currentIndex)+2] == 0){
+			if(indexes[(*currentIndex)+2] == 0 || indexes[(*currentIndex)+2] - indexes[(*currentIndex)] < 0){
 				memset(messages + baslangicIndex, 0, maxtotmesslen - baslangicIndex);
 			}
 			else{
