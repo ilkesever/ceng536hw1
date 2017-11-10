@@ -10,7 +10,6 @@
 #include <sys/wait.h>
 
 #define BUF_SIZE 256
-#define BUF_SIZE2 8192
 
 int main(int argc, char *argv[])
 {
@@ -21,7 +20,7 @@ int main(int argc, char *argv[])
 	fd_set readset;
 	int selres, nread;
 	char line[BUF_SIZE];
-	char line2[BUF_SIZE2];
+	char line2[BUF_SIZE];
 
 	if(argc != 2){
 		printf("Unknown usage. Usage : './client address' \n");
@@ -65,7 +64,7 @@ int main(int argc, char *argv[])
 
 	if (fork()){
 		while (1 == 1) {
-			fgets(line,1024,stdin);
+			fgets(line,BUF_SIZE,stdin);
 			nread=send(s,line,strlen(line)+1,0);
 
 			if (nread<0)
@@ -79,9 +78,12 @@ int main(int argc, char *argv[])
 	else
 	{
 		while (1 == 1) {
-			nread=recv(s,line2,BUF_SIZE2,0);
-	    	printf("received: len=%d, content=%s\n",
-			            	nread,line2);
+			memset(line2 ,0 , BUF_SIZE); 
+			nread=recv(s,line2,BUF_SIZE,0);
+			for (int i = 0; i < sizeof line2; ++i)
+			{
+				printf("%c",line2[i] );
+			}
 			if (nread<0)
 				break;
 			else if(strcmp(line2, "BYE\n") == 0)

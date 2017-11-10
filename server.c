@@ -86,7 +86,7 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 		strncpy(messages+baslangicIndex, buf, strlen(buf));
 
 		*currentIndex += 1;
-		strcpy(out, "<ok>");
+		strcpy(out, "<ok>\n");
 	}
 	else if(startsWith("LAST",buf))
 	{
@@ -117,7 +117,7 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 	else
 	{
 		printf("************\n");
-		strncpy(out,"NOT SUPPORTED YET",BUF_SIZE);
+		strncpy(out,"NOT SUPPORTED YET\n",BUF_SIZE);
 		printf("************\n");
 	}
 
@@ -184,7 +184,6 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 		}
 		else if(strcmp(out, "BYE\n") == 0)
 		{
-			send(sockfd,out,strlen(out)+1,0);
 			break;
 		}
 		else{
