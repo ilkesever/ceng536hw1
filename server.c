@@ -24,13 +24,8 @@ char *messages;
 int *currentIndex;
 int maxnmess;
 int maxtotmesslen;
-
-
-void childwait(int p) {
-	int stat;
-	wait(&stat);
-	signal(SIGCHLD,childwait);
-}
+int mysocket;
+char **follow;
 
 bool startsWith(char *pre, char *str)
 {
@@ -39,46 +34,49 @@ bool startsWith(char *pre, char *str)
 
 //ornek
 //strncpy(buf,ctime(&now),BUF_SIZE);
-char * servecommand(char *buf,  char *out) {
-	printf("***************************************************************\n");
-	for (int i = 0; i < maxtotmesslen; ++i)
+char * servecommand(char *input,  char *out) {
+	input[strlen(input) - 1] = 0;
+	if(startsWith("SEND ",input)) 
 	{
-		printf("%c - ",messages[i] );
-	}
-	printf("***************************************************************\n");
-
-	if(startsWith("SEND",buf)) 
-	{
-		strcpy(buf, buf + 5);
+		input = input + 5;
 
 		int baslangicIndex = indexes[*currentIndex];
-		int sonIndex = baslangicIndex + strlen(buf)-1;
+		int sonIndex = baslangicIndex + strlen(input);
+
+		/*
+		printf("------------------------------\n");
+		printf("%s\n",input );
+		printf("%d\n",strlen(input));
+		printf("------------------------------\n");
+		*/
 
 		if((*currentIndex) == maxnmess || sonIndex > maxtotmesslen){
 			baslangicIndex = 0;
 			(*currentIndex) = 0;
-			sonIndex = strlen(buf)-1;
+			sonIndex = strlen(input);
 		}
 
 		int tmpIndex = *currentIndex + 1;
 		printf("***************************************************************\n");
-		printf("***************************************************************\n");
 		printf("%d\n",indexes[tmpIndex]);
 		printf("%d\n",sonIndex);
 		printf("***************************************************************\n");
-		printf("***************************************************************\n");
 		if(!indexes[tmpIndex]){
+			printf("Case 1\n");
 			indexes[tmpIndex] = sonIndex;
 		}
 		else if(indexes[tmpIndex] == sonIndex){
+			printf("Case 2\n");
 			;
 		}
 		else if(indexes[tmpIndex] > sonIndex)
 		{
+			printf("Case 3\n");
 			memset(messages + baslangicIndex, 0, indexes[tmpIndex] - indexes[tmpIndex-1]);
 		}
 		else if(indexes[tmpIndex] < sonIndex)
 		{
+			printf("Case 4\n");
 			while(indexes[tmpIndex] && indexes[tmpIndex] < sonIndex){			
 				indexes[tmpIndex] = sonIndex;
 				tmpIndex += 1;
@@ -108,15 +106,15 @@ char * servecommand(char *buf,  char *out) {
 			}
 		}
 
-		strncpy(messages+baslangicIndex, buf, strlen(buf)-1);
+		strncpy(messages+baslangicIndex, input, strlen(input));
 
 		*currentIndex += 1;
 		strcpy(out, "<ok>\n");
 	}
-	else if(startsWith("LAST",buf))
+	else if(startsWith("LAST",input))
 	{
-		strcpy(buf, buf + 5);
-		int lastCount = atoi(buf);
+		input = input + 5;
+		int lastCount = atoi(input);
 		if(lastCount == 0 || lastCount >= maxnmess) lastCount = maxnmess;
 
 		int sonIndex = indexes[*currentIndex];
@@ -144,15 +142,78 @@ char * servecommand(char *buf,  char *out) {
 			}
 		}
 	}
-	else if(startsWith("BYE",buf))
+	else if(startsWith("FOLLOW ",input))
 	{
-		strncpy(out,"BYE\n",BUF_SIZE);
+		printf("1--------------------\n");
+
+		input = input + 7;
+
+		for (int i = 0; i < 10000; ++i)
+		{
+			if(follow[i] != NULL && strcmp(follow[i], input) == 0){
+				strncpy(out,"You are already following\n",BUF_SIZE);
+				return out;
+			}
+		}
+
+		for (int i = 0; i < 10000; ++i)
+		{
+			if(follow[i] == NULL){
+				follow[i] = malloc (sizeof (char) * sizeof(input));
+				strncpy(follow[i],input,strlen(input));
+				strncpy(out,"<ok>\n",BUF_SIZE);
+				break;
+			}
+		}
+		printf("2--------------------\n");
+		for (int i = 0; i < 10000; ++i)
+		{
+			if(follow[i] != NULL){
+				printf("%s\n",follow[i]);
+			}
+		}
+		printf("3--------------------\n");
+	}
+	else if(startsWith("UNFOLLOW ",input))
+	{
+		printf("1--------------------\n");
+
+		input = input + 9;
+
+		for (int i = 0; i < 10000; ++i)
+		{
+			if(follow[i] != NULL && strcmp(follow[i], input) == 0){
+				follow[i] = NULL;
+				strncpy(out,"<ok>\n",BUF_SIZE);
+			}
+		}
+
+		printf("2--------------------\n");
+		for (int i = 0; i < 10000; ++i)
+		{
+			if(follow[i] != NULL){
+				printf("%s\n",follow[i]);
+			}
+		}
+		printf("3--------------------\n");
+	}
+	else if(startsWith("FOLLOWING",input))
+	{
+		printf("1--------------------\n");
+
+		input = input + 10;
+
+		for (int i = 0; i < 10000; ++i)
+		{
+			if(follow[i] != NULL){
+				strcat(out,follow[i]);
+				strcat(out,"\n");
+			}
+		}
 	}
 	else
 	{
-		printf("************\n");
 		strncpy(out,"NOT SUPPORTED YET\n",BUF_SIZE);
-		printf("************\n");
 	}
 
 	printf("-------------------\n");
@@ -161,24 +222,29 @@ char * servecommand(char *buf,  char *out) {
 	}
 	printf("\n-------------------\n");
 
-
-	printf("///////////////////\n");
-	printf("%s",out);
-	printf("///////////////////\n");
+	printf("***************************************************************\n");
+	for (int i = 0; i < maxtotmesslen; ++i)
+	{
+		printf("%c - ",messages[i] );
+	}
+	printf("***************************************************************\n");
 
 	return out;
 }
 	
 void agent(int sockfd){
+	follow = malloc (sizeof (char *) * 10000);
+	mysocket = sockfd;
 	char * buf;
 	buf = (char *) malloc(BUF_SIZE);
+	
 	int nread;
 
 	sem_t *sem = sem_open(SNAME, 0);
 	
 	while (1) 	{		
-		memset(buf, 0, sizeof buf);
-		nread=recv(sockfd,buf,BUF_SIZE,0);
+		memset(buf, 0, BUF_SIZE);
+		nread=recv(mysocket,buf,BUF_SIZE,0);
     	printf("received: len=%d, content=%s\n",
 		            	nread,buf);
 
@@ -195,7 +261,7 @@ void agent(int sockfd){
 		servecommand(buf, out);
 		sem_post(sem);
 		
-		nread=send(sockfd,out,strlen(out)+1,0);
+		nread=send(mysocket,out,strlen(out)+1,0);
 		if (nread<0){
 			perror("writing:");
 		}
@@ -203,12 +269,13 @@ void agent(int sockfd){
 			printf("wrote: %d bytes, %s\n",nread,out);
 		} 			
 	}
-	close(sockfd);
+	close(mysocket);
 	return;
 }
 
 int main(int argc, char *argv[])
 {
+
     int s, len,plen,ns;
     struct sockaddr_un saun;
     struct sockaddr_un paun;
@@ -246,8 +313,6 @@ int main(int argc, char *argv[])
     	perror("server: listen");
 		exit(1);
     }
-
-	signal(SIGCHLD,childwait);
 
 	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex;
 
