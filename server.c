@@ -17,6 +17,15 @@
 #define BUF_SIZE 256
 #define SNAME "/mysem"
 
+
+
+int *indexes;
+char *messages;
+int *currentIndex;
+int maxnmess;
+int maxtotmesslen;
+
+
 void childwait(int p) {
 	int stat;
 	wait(&stat);
@@ -30,7 +39,7 @@ bool startsWith(char *pre, char *str)
 
 //ornek
 //strncpy(buf,ctime(&now),BUF_SIZE);
-char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, int maxnmess, int maxtotmesslen, char *out) {
+char * servecommand(char *buf,  char *out) {
 	printf("***************************************************************\n");
 	for (int i = 0; i < maxtotmesslen; ++i)
 	{
@@ -122,11 +131,11 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 		{
 			strncat(out, messages+indexes[basIndexYeri],indexes[basIndexYeri+1]-indexes[basIndexYeri] );
 			if(((*out)+ strlen(out) )){
-				printf("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n");
-				printf("%c\n", (*out)+ strlen(out) );
-				printf("%c\n", (*out) );
-				printf("%d\n", strlen(out) );
-				printf("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n");
+				//printf("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n");
+				//printf("%c\n", (*out)+ strlen(out) );
+				//printf("%c\n", (*out) );
+				//printf("%d\n", strlen(out) );
+				//printf("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n");
 				strcat(out, "\n");
 			}
 			basIndexYeri += 1;
@@ -160,34 +169,14 @@ char * servecommand(char *buf, int *indexes, char *messages, int *currentIndex, 
 	return out;
 }
 	
-void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentIndex, int sockfd, int maxnmess, int maxtotmesslen){
+void agent(int sockfd){
 	char * buf;
 	buf = (char *) malloc(BUF_SIZE);
 	int nread;
 
-	int *indexes;
-	char *messages;
-	int *currentIndex;
-
-	if ((indexes=(int *)shmat(sharedStartIndexKey,0,0))==NULL) {
-		perror("Attaching shared mem");
-		exit(-1);
-	}
-
-	if ((messages=(char *)shmat(sharedMessagesKey,0,0))==NULL) {
-		perror("Attaching shared mem");
-		exit(-1);
-	}
-
-	if ((currentIndex=(int *)shmat(sharedCurrentIndex,0,0))==NULL) {
-		perror("Attaching shared mem");
-		exit(-1);
-	}
-
-
 	sem_t *sem = sem_open(SNAME, 0);
 	
-	while (1) {		
+	while (1) 	{		
 		memset(buf, 0, sizeof buf);
 		nread=recv(sockfd,buf,BUF_SIZE,0);
     	printf("received: len=%d, content=%s\n",
@@ -195,21 +184,20 @@ void agent(int sharedStartIndexKey, int sharedMessagesKey, int sharedCurrentInde
 
 		if (nread<0)
 			break;
-		
+		else if(strcmp(buf, "BYE\n") == 0)
+		{
+			break;
+		}
 
 		char * out;
 		out = (char *) malloc(sizeof(char) * BUF_SIZE);
 		sem_wait(sem);
-		servecommand(buf, indexes, messages, currentIndex, maxnmess, maxtotmesslen, out);
+		servecommand(buf, out);
 		sem_post(sem);
-
+		
 		nread=send(sockfd,out,strlen(out)+1,0);
 		if (nread<0){
 			perror("writing:");
-		}
-		else if(strcmp(out, "BYE\n") == 0)
-		{
-			break;
 		}
 		else{
 			printf("wrote: %d bytes, %s\n",nread,out);
@@ -232,8 +220,8 @@ int main(int argc, char *argv[])
 	}
 
 	char* address = argv[3];
-	int maxnmess = strtol(argv[1], NULL, 10);
-	int maxtotmesslen = strtol(argv[2], NULL, 10);
+	maxnmess = strtol(argv[1], NULL, 10);
+	maxtotmesslen = strtol(argv[2], NULL, 10);
 
 	sem_t *sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
 	sem_init(sem, 0, 1);
@@ -261,9 +249,7 @@ int main(int argc, char *argv[])
 
 	signal(SIGCHLD,childwait);
 
-	int sharedStartIndexKey, sharedMessagesKey;
-
-	int sharedCurrentIndex;
+	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex;
 
 	if ((sharedStartIndexKey=shmget(IPC_PRIVATE,sizeof(int)*maxnmess,IPC_CREAT|0600))<0) {
 		perror("Creating shared mem");
@@ -280,6 +266,21 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
+	if ((indexes=(int *)shmat(sharedStartIndexKey,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
+	if ((messages=(char *)shmat(sharedMessagesKey,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
+	if ((currentIndex=(int *)shmat(sharedCurrentIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
     while ((ns=accept(s,(struct sockaddr *)&paun,&plen))>=0) {
 	    printf("accepted peer address: len=%d, fam=%d, path=%s\n",
 			            plen,paun.sun_family, paun.sun_path);
@@ -290,12 +291,12 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			agent(sharedStartIndexKey,sharedMessagesKey,sharedCurrentIndex,ns,maxnmess,maxtotmesslen);
+			agent(ns);
 			break;
 		}
 	}
 
-	printf("agent closed \n");
+	printf("Agent closed.\n");
 
     close(s);
 
