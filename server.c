@@ -15,17 +15,42 @@
 #include <fcntl.h>
 
 #define BUF_SIZE 256
+#define MAX_FOLLOWER 10000
 #define SNAME "/mysem"
 
 
 
+typedef struct FollowEntry
+{
+	char word[256];
+	int pid;
+} exampleStruct ;
+
+int getHash(char *word){
+	int hash = 7;
+	for (int i = 0; i < strlen(word); i++) {
+	    hash = hash*31 + word[i];
+	}
+	return hash%MAX_FOLLOWER;
+}
+
 int *indexes;
 char *messages;
 int *currentIndex;
+int *followCount;
+struct FollowEntry * followList;
 int maxnmess;
 int maxtotmesslen;
 int mysocket;
 char **follow;
+sem_t *sem;
+
+void notify(int sno)
+{
+	sem_wait(sem);
+	send(mysocket,"NOTIFIED\n",10,0);
+	sem_post(sem);
+}
 
 bool startsWith(char *pre, char *str)
 {
@@ -42,13 +67,6 @@ char * servecommand(char *input,  char *out) {
 
 		int baslangicIndex = indexes[*currentIndex];
 		int sonIndex = baslangicIndex + strlen(input);
-
-		/*
-		printf("------------------------------\n");
-		printf("%s\n",input );
-		printf("%d\n",strlen(input));
-		printf("------------------------------\n");
-		*/
 
 		if((*currentIndex) == maxnmess || sonIndex > maxtotmesslen){
 			baslangicIndex = 0;
@@ -110,6 +128,55 @@ char * servecommand(char *input,  char *out) {
 
 		*currentIndex += 1;
 		strcpy(out, "<ok>\n");
+
+		char* token = strtok(input, " ");
+		int toNotify[MAX_FOLLOWER];
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			toNotify[i] = 0;
+		}
+		while (token) {
+		    printf("token: %s\n", token);
+
+		    int hash = getHash(token);
+		    int begin = hash;
+		    while(1==1){
+				if(followList[hash].pid == 0){
+					break;
+				}
+				else if(followList[hash].pid == -1){
+					;
+				}
+				else if(strcmp(followList[hash].word, token) == 0){
+					bool exist=false;
+					int i = 0;
+					while(toNotify[i] != 0){
+						if(toNotify[i] == followList[hash].pid){
+							exist = true;
+						}
+						i+=1;
+					}
+					if(exist == false){
+						toNotify[i] = followList[hash].pid;
+					}
+				}
+				hash +=1;
+				if(begin == hash){
+					break;
+				}
+				if(hash == MAX_FOLLOWER) hash = 0;
+			}
+
+		    token = strtok(NULL, " ");
+		}
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			if(toNotify[i] == 0) break;
+			kill(toNotify[i], SIGINT);
+			printf("\nNOTİFY = %d\n",toNotify[i]);
+			/* code */
+		}
+
 	}
 	else if(startsWith("LAST",input))
 	{
@@ -145,18 +212,24 @@ char * servecommand(char *input,  char *out) {
 	else if(startsWith("FOLLOW ",input))
 	{
 		printf("1--------------------\n");
-
+		printf("%d\n",(*followCount));
+		printf("%d\n",MAX_FOLLOWER);
+		if((*followCount) == MAX_FOLLOWER) {
+			printf("Max follower count reached\n");
+			strncpy(out,"Max follower count reached\n",BUF_SIZE);
+			return out;
+		}
 		input = input + 7;
 
-		for (int i = 0; i < 10000; ++i)
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] != NULL && strcmp(follow[i], input) == 0){
 				strncpy(out,"You are already following\n",BUF_SIZE);
 				return out;
 			}
 		}
-
-		for (int i = 0; i < 10000; ++i)
+		*followCount += 1;
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] == NULL){
 				follow[i] = malloc (sizeof (char) * sizeof(input));
@@ -165,8 +238,30 @@ char * servecommand(char *input,  char *out) {
 				break;
 			}
 		}
+		int hash = getHash(input);
+		int begin = hash;
+		while(1==1){
+			if(followList[hash].pid <= 0){
+				followList[hash].pid = getpid();
+				memset(followList[hash].word, 0, 256);
+				strcpy(followList[hash].word,input);
+				break;
+			}
+			hash +=1;
+			if(begin == hash){
+				break;
+			}
+			if(hash == MAX_FOLLOWER) hash = 0;
+		}
+
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			if(followList[i].pid > 0){
+				printf("\n%d = %s - %d\n",i, followList[i].word, followList[i].pid);
+			}
+		}
 		printf("2--------------------\n");
-		for (int i = 0; i < 10000; ++i)
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] != NULL){
 				printf("%s\n",follow[i]);
@@ -180,16 +275,51 @@ char * servecommand(char *input,  char *out) {
 
 		input = input + 9;
 
-		for (int i = 0; i < 10000; ++i)
+		bool already = false;
+
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] != NULL && strcmp(follow[i], input) == 0){
+				already = true;
 				follow[i] = NULL;
 				strncpy(out,"<ok>\n",BUF_SIZE);
 			}
 		}
+		if(already == false) return out;
+		
+		*followCount -= 1;
+
+		int hash = getHash(input);
+		int begin = hash;
+
+		while(1==1){
+			if(followList[hash].pid == 0){
+				break;
+			}
+			else if(followList[hash].pid == -1){
+				;
+			}
+			else if(followList[hash].pid == getpid() && strcmp(followList[hash].word, input) == 0){
+				followList[hash].pid = -1;
+				memset(followList[hash].word, 0, 256);
+				break;
+			}
+			hash +=1;
+			if(begin == hash){
+				break;
+			}
+			if(hash == MAX_FOLLOWER) hash = 0;
+		}
+
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			if(followList[i].pid > 0){
+				printf("\n%d = %s - %d\n",i, followList[i].word, followList[i].pid);
+			}
+		}
 
 		printf("2--------------------\n");
-		for (int i = 0; i < 10000; ++i)
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] != NULL){
 				printf("%s\n",follow[i]);
@@ -203,7 +333,7 @@ char * servecommand(char *input,  char *out) {
 
 		input = input + 10;
 
-		for (int i = 0; i < 10000; ++i)
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] != NULL){
 				strcat(out,follow[i]);
@@ -233,14 +363,12 @@ char * servecommand(char *input,  char *out) {
 }
 	
 void agent(int sockfd){
-	follow = malloc (sizeof (char *) * 10000);
+	follow = malloc (sizeof (char *) * MAX_FOLLOWER);
 	mysocket = sockfd;
 	char * buf;
 	buf = (char *) malloc(BUF_SIZE);
-	
 	int nread;
-
-	sem_t *sem = sem_open(SNAME, 0);
+	signal(SIGINT,notify);
 	
 	while (1) 	{		
 		memset(buf, 0, BUF_SIZE);
@@ -290,8 +418,8 @@ int main(int argc, char *argv[])
 	maxnmess = strtol(argv[1], NULL, 10);
 	maxtotmesslen = strtol(argv[2], NULL, 10);
 
-	sem_t *sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
-	sem_init(sem, 0, 1);
+	sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
+	sem_init(sem, 1, 1);
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         perror("server: socket");
@@ -314,7 +442,7 @@ int main(int argc, char *argv[])
 		exit(1);
     }
 
-	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex;
+	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex, sharedFollowIndex, sharedFollowCountIndex;
 
 	if ((sharedStartIndexKey=shmget(IPC_PRIVATE,sizeof(int)*maxnmess,IPC_CREAT|0600))<0) {
 		perror("Creating shared mem");
@@ -327,6 +455,16 @@ int main(int argc, char *argv[])
 	}
 
 	if ((sharedCurrentIndex=shmget(IPC_PRIVATE,sizeof(int),IPC_CREAT|0600))<0) {
+		perror("Creating shared mem");
+		exit(-1);
+	}
+
+	if ((sharedFollowCountIndex=shmget(IPC_PRIVATE,sizeof(int),IPC_CREAT|0600))<0) {
+		perror("Creating shared mem");
+		exit(-1);
+	}
+
+	if ((sharedFollowIndex=shmget(IPC_PRIVATE,sizeof(exampleStruct) * MAX_FOLLOWER,IPC_CREAT|0600))<0) {
 		perror("Creating shared mem");
 		exit(-1);
 	}
@@ -345,6 +483,29 @@ int main(int argc, char *argv[])
 		perror("Attaching shared mem");
 		exit(-1);
 	}
+
+	if ((followCount=(int *)shmat(sharedFollowCountIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
+	if ((followList=shmat(sharedFollowIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
+	*currentIndex = 0;
+
+	for (int i = 0; i < maxnmess; ++i)
+	{
+		indexes[i] = 0;
+	}
+
+	for (int i = 0; i < MAX_FOLLOWER; ++i)
+	{
+		followList[i].pid = 0;
+	}
+
 
     while ((ns=accept(s,(struct sockaddr *)&paun,&plen))>=0) {
 	    printf("accepted peer address: len=%d, fam=%d, path=%s\n",
