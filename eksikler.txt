@@ -1,0 +1,3 @@
+send de parse etme strtok
+küçük harf kontrolü
+ip türündende çalışacak
