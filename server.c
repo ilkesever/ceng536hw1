@@ -4,20 +4,21 @@
 #include <time.h>
 #include <sys/un.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include<sys/ipc.h>
-#include<sys/shm.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 #include <stdbool.h>
 #include <semaphore.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #define BUF_SIZE 256
 #define MAX_FOLLOWER 10000
 #define SNAME "/mysem"
-
 
 
 typedef struct FollowEntry
@@ -29,9 +30,22 @@ typedef struct FollowEntry
 int getHash(char *word){
 	int hash = 7;
 	for (int i = 0; i < strlen(word); i++) {
-	    hash = hash*31 + word[i];
+	    hash = hash*31 + tolower(word[i]);
 	}
 	return hash%MAX_FOLLOWER;
+}
+
+int strcicmp(char *a, char *b)
+{
+	printf("COMPAREEEEEEEEEEEEEEEEEEEEEE\n");
+    for (;; a++, b++) {
+        int d = tolower(*a) - tolower(*b);
+        printf("%c,", tolower(*a));
+        printf("%c,", tolower(*a));
+        printf("%d\n", d);
+        if (d != 0 || !*a)
+            return d;
+    }
 }
 
 int *indexes;
@@ -45,11 +59,33 @@ int mysocket;
 char **follow;
 sem_t *sem;
 
-void notify(int sno)
+
+void *myThreadFun(void *vargp)
 {
 	sem_wait(sem);
-	send(mysocket,"NOTIFIED\n",10,0);
-	sem_post(sem);
+	int beginIndex = indexes[(*currentIndex)-1];
+	int endIndex = indexes[(*currentIndex)];
+
+	if(!beginIndex) beginIndex = 0;
+	if(endIndex < beginIndex) endIndex = maxtotmesslen;
+
+	char *ilke = malloc(sizeof(char)*(endIndex-beginIndex+1));
+ 	printf("begin = %d \n",beginIndex);
+ 	printf("end = %d \n",endIndex);
+	strncpy(ilke,messages+beginIndex,endIndex-beginIndex);
+	strcat(ilke,"\n");
+	send(mysocket,ilke,(endIndex-beginIndex+1),0);
+ 	printf("5Printing GeeksQuiz from Thread \n");
+	sem_post(sem);   
+    return NULL;
+}
+
+void notify(int sno)
+{
+    pthread_t tid;
+    printf("Before Thread\n");
+    pthread_create(&tid, NULL, myThreadFun, NULL);
+    //pthread_join(tid, NULL);
 }
 
 bool startsWith(char *pre, char *str)
@@ -147,12 +183,13 @@ char * servecommand(char *input,  char *out) {
 				else if(followList[hash].pid == -1){
 					;
 				}
-				else if(strcmp(followList[hash].word, token) == 0){
+				else if(strcicmp(followList[hash].word, token) == 0){
 					bool exist=false;
 					int i = 0;
 					while(toNotify[i] != 0){
 						if(toNotify[i] == followList[hash].pid){
 							exist = true;
+							break;
 						}
 						i+=1;
 					}
@@ -223,7 +260,7 @@ char * servecommand(char *input,  char *out) {
 
 		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
-			if(follow[i] != NULL && strcmp(follow[i], input) == 0){
+			if(follow[i] != NULL && strcicmp(follow[i], input) == 0){
 				strncpy(out,"You are already following\n",BUF_SIZE);
 				return out;
 			}
@@ -279,7 +316,7 @@ char * servecommand(char *input,  char *out) {
 
 		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
-			if(follow[i] != NULL && strcmp(follow[i], input) == 0){
+			if(follow[i] != NULL && strcicmp(follow[i], input) == 0){
 				already = true;
 				follow[i] = NULL;
 				strncpy(out,"<ok>\n",BUF_SIZE);
@@ -299,7 +336,7 @@ char * servecommand(char *input,  char *out) {
 			else if(followList[hash].pid == -1){
 				;
 			}
-			else if(followList[hash].pid == getpid() && strcmp(followList[hash].word, input) == 0){
+			else if(followList[hash].pid == getpid() && strcicmp(followList[hash].word, input) == 0){
 				followList[hash].pid = -1;
 				memset(followList[hash].word, 0, 256);
 				break;
