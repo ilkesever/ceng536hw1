@@ -76,7 +76,6 @@ void *NotifierThread(void *vargp)
 {
 	//printf("UYARILDI\n");
 	sem_wait(sem);
-	printf("UYARILDI\n");
 	int beginIndex = indexes[(*currentIndex)-1];
 	int endIndex = indexes[(*currentIndex)];
 
@@ -93,7 +92,6 @@ void *NotifierThread(void *vargp)
 			char * point=strcasestr(ilke, follow[i]);
 			int index = point - ilke;
 			if (point != NULL) {
-				printf("%d\n", index);
 				ilke = memset(ilke,0,(endIndex-beginIndex)+3);
 				strncpy(ilke,messages+beginIndex,index);
 				strcat(ilke,"[");
@@ -103,7 +101,6 @@ void *NotifierThread(void *vargp)
 				strcat(ilke,"\n");
 				send(mysocket,ilke,(endIndex-beginIndex)+3,0);
 			}
-			printf("%s\n",follow[i]);
 		}
 	}
  	free(ilke);
@@ -141,10 +138,6 @@ char * servecommand(char *input,  char *out)
 		}
 
 		int tmpIndex = *currentIndex + 1;
-		printf("***************************************************************\n");
-		printf("%d\n",indexes[tmpIndex]);
-		printf("%d\n",sonIndex);
-		printf("***************************************************************\n");
 		if(!indexes[tmpIndex]){
 			printf("Case 1\n");
 			indexes[tmpIndex] = sonIndex;
@@ -177,11 +170,11 @@ char * servecommand(char *input,  char *out)
 					}
 				}
 			}
-			printf("%c\n",*(messages + baslangicIndex));
+			/*printf("%c\n",*(messages + baslangicIndex));
 			printf("%d\n",baslangicIndex);
 			printf("%d\n",(*currentIndex));
 			printf("%d\n",indexes[(*currentIndex)+2]);
-			printf("%d\n",indexes[(*currentIndex)]);
+			printf("%d\n",indexes[(*currentIndex)]);*/
 			if(indexes[(*currentIndex)+2] == 0 || indexes[(*currentIndex)+2] - indexes[(*currentIndex)] < 0){
 				memset(messages + baslangicIndex, 0, maxtotmesslen - baslangicIndex);
 			}
@@ -207,10 +200,10 @@ char * servecommand(char *input,  char *out)
 		    int hash = getHash(token);
 		    int begin = hash;
 		    int count = 0;
-		    printf("token: %s,begin-hash:%d\n", token, hash);
+		    //printf("token: %s,begin-hash:%d\n", token, hash);
 		    while(count<100){
 		    	count +=1;
-		    	printf("token: %s,hash:%d\n", token, hash);
+		    	//printf("token: %s,hash:%d\n", token, hash);
 				if(followList[hash].pid == 0){
 					break;
 				}
@@ -233,8 +226,8 @@ char * servecommand(char *input,  char *out)
 				}
 				hash +=1;
 				
-		    	printf("token: %s,next hash:%d\n", token, hash);
-		    	printf("token: %s,MAX_FOLLOWER:%d\n", token, MAX_FOLLOWER);
+		    	//printf("token: %s,next hash:%d\n", token, hash);
+		    	//printf("token: %s,MAX_FOLLOWER:%d\n", token, MAX_FOLLOWER);
 				if(hash == MAX_FOLLOWER) hash = 0;
 
 				if(begin == hash){
@@ -249,7 +242,7 @@ char * servecommand(char *input,  char *out)
 		{
 			if(toNotify[i] == 0) break;
 			kill(toNotify[i], SIGINT);
-			printf("\nNOTİFY = %d\n",toNotify[i]);
+			//printf("\nNOTİFY = %d\n",toNotify[i]);
 			/* code */
 		}
 
@@ -287,11 +280,7 @@ char * servecommand(char *input,  char *out)
 	}
 	else if(startsWith("FOLLOW ",input))
 	{
-		printf("1--------------------\n");
-		printf("%d\n",(*followCount));
-		printf("%d\n",MAX_FOLLOWER);
 		if((*followCount) == MAX_FOLLOWER) {
-			printf("Max follower count reached\n");
 			strncpy(out,"Max follower count reached\n",BUF_SIZE);
 			return out;
 		}
@@ -330,25 +319,9 @@ char * servecommand(char *input,  char *out)
 			if(hash == MAX_FOLLOWER) hash = 0;
 		}
 
-		for (int i = 0; i < MAX_FOLLOWER; ++i)
-		{
-			if(followList[i].pid > 0){
-				printf("\n%d = %s - %d\n",i, followList[i].word, followList[i].pid);
-			}
-		}
-		printf("2--------------------\n");
-		for (int i = 0; i < MAX_FOLLOWER; ++i)
-		{
-			if(follow[i] != NULL){
-				printf("%s\n",follow[i]);
-			}
-		}
-		printf("3--------------------\n");
 	}
 	else if(startsWith("UNFOLLOW ",input))
 	{
-		printf("1--------------------\n");
-
 		input = input + 9;
 
 		bool already = false;
@@ -386,27 +359,9 @@ char * servecommand(char *input,  char *out)
 			}
 			if(hash == MAX_FOLLOWER) hash = 0;
 		}
-
-		for (int i = 0; i < MAX_FOLLOWER; ++i)
-		{
-			if(followList[i].pid > 0){
-				printf("\n%d = %s - %d\n",i, followList[i].word, followList[i].pid);
-			}
-		}
-
-		printf("2--------------------\n");
-		for (int i = 0; i < MAX_FOLLOWER; ++i)
-		{
-			if(follow[i] != NULL){
-				printf("%s\n",follow[i]);
-			}
-		}
-		printf("3--------------------\n");
 	}
 	else if(startsWith("FOLLOWING",input))
 	{
-		printf("1--------------------\n");
-
 		input = input + 10;
 
 		for (int i = 0; i < MAX_FOLLOWER; ++i)
@@ -423,7 +378,6 @@ char * servecommand(char *input,  char *out)
 			if(followList[i].pid == getpid()){
 				followList[i].pid =-1;
 				*followCount -= 1;
-				printf("\n%d = %s - %d\n",i, followList[i].word, *followCount);
 			}
 		}
 	}
@@ -484,7 +438,7 @@ void agent(int sockfd)
 			perror("writing:");
 		}
 		else{
-			printf("wrote: %d bytes, %s\n",nread,out);
+			//printf("wrote: %d bytes, %s\n",nread,out);
 		} 			
 	}
 	shutdown(mysocket, 2);
