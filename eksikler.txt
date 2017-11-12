@@ -1,3 +1,6 @@
-send de parse etme strtok
+send de parse etme strtok + DONE
 küçük harf kontrolü + DONE
-ip türündende çalışacak
+ip türündende çalışacak + DONE
+socket kapanınca client durmuyor + DONE
+sırayla serve etme çalışmıyor ? 
+kendini notify edince ok önce basıyor + DONE

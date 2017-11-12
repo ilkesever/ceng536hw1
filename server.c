@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <string.h>
@@ -15,9 +16,11 @@
 #include <semaphore.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define BUF_SIZE 256
-#define MAX_FOLLOWER 10000
+#define MAX_FOLLOWER 2
 #define SNAME "/mysem"
 
 
@@ -35,14 +38,23 @@ int getHash(char *word){
 	return hash%MAX_FOLLOWER;
 }
 
+bool ifInt(char *s){
+	bool valid = true;
+	for (int i = 0; i < strlen(s); ++i)
+	{
+	    if (!isdigit(s[i]))
+	    {
+	        valid = false;
+	        break;
+	    }
+	}
+	return valid;
+}
+
 int strcicmp(char *a, char *b)
 {
-	printf("COMPAREEEEEEEEEEEEEEEEEEEEEE\n");
     for (;; a++, b++) {
         int d = tolower(*a) - tolower(*b);
-        printf("%c,", tolower(*a));
-        printf("%c,", tolower(*a));
-        printf("%d\n", d);
         if (d != 0 || !*a)
             return d;
     }
@@ -60,22 +72,41 @@ char **follow;
 sem_t *sem;
 
 
-void *myThreadFun(void *vargp)
+void *NotifierThread(void *vargp)
 {
+	//printf("UYARILDI\n");
 	sem_wait(sem);
+	printf("UYARILDI\n");
 	int beginIndex = indexes[(*currentIndex)-1];
 	int endIndex = indexes[(*currentIndex)];
 
 	if(!beginIndex) beginIndex = 0;
 	if(endIndex < beginIndex) endIndex = maxtotmesslen;
 
-	char *ilke = malloc(sizeof(char)*(endIndex-beginIndex+1));
- 	printf("begin = %d \n",beginIndex);
- 	printf("end = %d \n",endIndex);
+	char *ilke = calloc((endIndex-beginIndex)+3,sizeof(char));
 	strncpy(ilke,messages+beginIndex,endIndex-beginIndex);
-	strcat(ilke,"\n");
-	send(mysocket,ilke,(endIndex-beginIndex+1),0);
- 	printf("5Printing GeeksQuiz from Thread \n");
+	for (int i = 0; i < MAX_FOLLOWER; ++i)
+	{
+		if(follow[i] != NULL){
+			ilke = memset(ilke,0,(endIndex-beginIndex)+3);
+			strncpy(ilke,messages+beginIndex,endIndex-beginIndex);
+			char * point=strcasestr(ilke, follow[i]);
+			int index = point - ilke;
+			if (point != NULL) {
+				printf("%d\n", index);
+				ilke = memset(ilke,0,(endIndex-beginIndex)+3);
+				strncpy(ilke,messages+beginIndex,index);
+				strcat(ilke,"[");
+				strncpy(ilke + index + 1,messages+beginIndex+index,strlen(follow[i]));
+				strcat(ilke,"]");
+				strncpy(ilke + index + 2 + strlen(follow[i]),messages+beginIndex+index+strlen(follow[i]),endIndex-beginIndex-index-strlen(follow[i]));
+				strcat(ilke,"\n");
+				send(mysocket,ilke,(endIndex-beginIndex)+3,0);
+			}
+			printf("%s\n",follow[i]);
+		}
+	}
+ 	free(ilke);
 	sem_post(sem);   
     return NULL;
 }
@@ -83,19 +114,18 @@ void *myThreadFun(void *vargp)
 void notify(int sno)
 {
     pthread_t tid;
-    printf("Before Thread\n");
-    pthread_create(&tid, NULL, myThreadFun, NULL);
+    pthread_create(&tid, NULL, NotifierThread, NULL);
     //pthread_join(tid, NULL);
 }
 
 bool startsWith(char *pre, char *str)
 {
-    return strncmp(pre, str, strlen(pre)) == 0;
+
+    return strncmp(pre, str, strlen(pre)) == 0;  
 }
 
-//ornek
-//strncpy(buf,ctime(&now),BUF_SIZE);
-char * servecommand(char *input,  char *out) {
+char * servecommand(char *input,  char *out) 
+{
 	input[strlen(input) - 1] = 0;
 	if(startsWith("SEND ",input)) 
 	{
@@ -165,18 +195,22 @@ char * servecommand(char *input,  char *out) {
 		*currentIndex += 1;
 		strcpy(out, "<ok>\n");
 
-		char* token = strtok(input, " ");
+		char delimit[]= " \t\r\n\v\f\\,.-:;'?!";
+		char* token = strtok(input, delimit);
 		int toNotify[MAX_FOLLOWER];
 		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			toNotify[i] = 0;
 		}
 		while (token) {
-		    printf("token: %s\n", token);
 
 		    int hash = getHash(token);
 		    int begin = hash;
-		    while(1==1){
+		    int count = 0;
+		    printf("token: %s,begin-hash:%d\n", token, hash);
+		    while(count<100){
+		    	count +=1;
+		    	printf("token: %s,hash:%d\n", token, hash);
 				if(followList[hash].pid == 0){
 					break;
 				}
@@ -198,14 +232,19 @@ char * servecommand(char *input,  char *out) {
 					}
 				}
 				hash +=1;
+				
+		    	printf("token: %s,next hash:%d\n", token, hash);
+		    	printf("token: %s,MAX_FOLLOWER:%d\n", token, MAX_FOLLOWER);
+				if(hash == MAX_FOLLOWER) hash = 0;
+
 				if(begin == hash){
 					break;
 				}
-				if(hash == MAX_FOLLOWER) hash = 0;
 			}
 
-		    token = strtok(NULL, " ");
+		    token = strtok(NULL, delimit);
 		}
+
 		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(toNotify[i] == 0) break;
@@ -265,7 +304,7 @@ char * servecommand(char *input,  char *out) {
 				return out;
 			}
 		}
-		*followCount += 1;
+		*followCount += 1; 
 		for (int i = 0; i < MAX_FOLLOWER; ++i)
 		{
 			if(follow[i] == NULL){
@@ -378,6 +417,16 @@ char * servecommand(char *input,  char *out) {
 			}
 		}
 	}
+	else if(startsWith("BYE",input)){
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			if(followList[i].pid == getpid()){
+				followList[i].pid =-1;
+				*followCount -= 1;
+				printf("\n%d = %s - %d\n",i, followList[i].word, *followCount);
+			}
+		}
+	}
 	else
 	{
 		strncpy(out,"NOT SUPPORTED YET\n",BUF_SIZE);
@@ -394,12 +443,13 @@ char * servecommand(char *input,  char *out) {
 	{
 		printf("%c - ",messages[i] );
 	}
-	printf("***************************************************************\n");
+	printf("\n***************************************************************\n");
 
 	return out;
 }
 	
-void agent(int sockfd){
+void agent(int sockfd)
+{
 	follow = malloc (sizeof (char *) * MAX_FOLLOWER);
 	mysocket = sockfd;
 	char * buf;
@@ -415,10 +465,6 @@ void agent(int sockfd){
 
 		if (nread<0)
 			break;
-		else if(strcmp(buf, "BYE\n") == 0)
-		{
-			break;
-		}
 
 		char * out;
 		out = (char *) malloc(sizeof(char) * BUF_SIZE);
@@ -426,7 +472,14 @@ void agent(int sockfd){
 		servecommand(buf, out);
 		sem_post(sem);
 		
+
+		if(strcmp(buf, "BYE") == 0)
+		{
+			break;
+		}
+
 		nread=send(mysocket,out,strlen(out)+1,0);
+
 		if (nread<0){
 			perror("writing:");
 		}
@@ -434,17 +487,17 @@ void agent(int sockfd){
 			printf("wrote: %d bytes, %s\n",nread,out);
 		} 			
 	}
-	close(mysocket);
+	shutdown(mysocket, 2);
 	return;
 }
 
 int main(int argc, char *argv[])
 {
-
+    char *ip = "0.0.0.0"; /* Virtual Machine */
+    struct sockaddr_in sockaddrin;
     int s, len,plen,ns;
     struct sockaddr_un saun;
     struct sockaddr_un paun;
-
 
 	if(argc != 4){
 		printf("Unknown usage. Usage : './messboard maxnmess maxtotmesslen address' \n");
@@ -455,31 +508,49 @@ int main(int argc, char *argv[])
 	maxnmess = strtol(argv[1], NULL, 10);
 	maxtotmesslen = strtol(argv[2], NULL, 10);
 
-	sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
-	sem_init(sem, 1, 1);
+	if(ifInt(address)){
+		printf("INET SOCKET\n");
+		s = socket(AF_INET, SOCK_STREAM, 0);
+	    if(s == -1) {
+	        fprintf(stderr, "Socket Error\n");
+	        exit(1);
+	    }
 
-    if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+		sockaddrin.sin_family = AF_INET;
+		sockaddrin.sin_port = htons(strtol(address, NULL, 10));
+		sockaddrin.sin_addr.s_addr = inet_addr(ip);
+		memset(sockaddrin.sin_zero, '\0', sizeof sockaddrin.sin_zero);  
+
+		if (bind(s, (struct sockaddr *) &sockaddrin, sizeof(sockaddrin)) < 0) {
+		    perror("server: bind");
+		    exit(1);
+		}
+	}
+	else{
+		printf("UNIX SOCKET\n");
+		if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         perror("server: socket");
         exit(1);
-    }
+		}
 
-    saun.sun_family = AF_UNIX;
-    strcpy(saun.sun_path, address);
+		saun.sun_family = AF_UNIX;
+		strcpy(saun.sun_path, address);
 
-    plen=len = sizeof(struct sockaddr_un);
+		plen=len = sizeof(struct sockaddr_un);
 
-    if (bind(s, (struct sockaddr *)&saun, len) < 0) {
-        perror("server: bind");
-        exit(1);
-    }
-
-    ns=listen(s,10);
-    if (ns<0) {
-    	perror("server: listen");
+		if (bind(s, (struct sockaddr *)&saun, len) < 0) {
+		    perror("server: bind");
+		    exit(1);
+		}
+	}
+	ns=listen(s,10);
+	if (ns<0) {
+		perror("server: listen");
 		exit(1);
-    }
+	}
+    
 
-	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex, sharedFollowIndex, sharedFollowCountIndex;
+	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex, sharedFollowIndex, sharedFollowCountIndex, sharedSemaphoreIndex;
 
 	if ((sharedStartIndexKey=shmget(IPC_PRIVATE,sizeof(int)*maxnmess,IPC_CREAT|0600))<0) {
 		perror("Creating shared mem");
@@ -502,6 +573,11 @@ int main(int argc, char *argv[])
 	}
 
 	if ((sharedFollowIndex=shmget(IPC_PRIVATE,sizeof(exampleStruct) * MAX_FOLLOWER,IPC_CREAT|0600))<0) {
+		perror("Creating shared mem");
+		exit(-1);
+	}
+
+	if ((sharedSemaphoreIndex=shmget(IPC_PRIVATE,sizeof(sem_t) ,IPC_CREAT|0600))<0) {
 		perror("Creating shared mem");
 		exit(-1);
 	}
@@ -531,7 +607,13 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
+	if ((sem=shmat(sharedSemaphoreIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
 	*currentIndex = 0;
+	*followCount = 0;
 
 	for (int i = 0; i < maxnmess; ++i)
 	{
@@ -543,6 +625,8 @@ int main(int argc, char *argv[])
 		followList[i].pid = 0;
 	}
 
+	//sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
+	sem_init(sem, 1, 1);
 
     while ((ns=accept(s,(struct sockaddr *)&paun,&plen))>=0) {
 	    printf("accepted peer address: len=%d, fam=%d, path=%s\n",
