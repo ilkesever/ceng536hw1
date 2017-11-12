@@ -20,7 +20,7 @@
 #include <arpa/inet.h>
 
 #define BUF_SIZE 256
-#define MAX_FOLLOWER 2
+#define MAX_FOLLOWER 10000
 #define SNAME "/mysem"
 
 
