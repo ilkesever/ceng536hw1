@@ -74,6 +74,7 @@ sem_t *sem;
 
 void *NotifierThread(void *vargp)
 {
+	char delimit[]= " \t\r\n\v\f\\,.-:;'?!";
 	//printf("UYARILDI\n");
 	sem_wait(sem);
 	int beginIndex = indexes[(*currentIndex)-1];
@@ -89,8 +90,18 @@ void *NotifierThread(void *vargp)
 		if(follow[i] != NULL){
 			ilke = memset(ilke,0,(endIndex-beginIndex)+3);
 			strncpy(ilke,messages+beginIndex,endIndex-beginIndex);
+			
+			int index = 0;
+			char* token = strtok(ilke, delimit);
+			while (token) {
+				//printf("%s --- %d\n",token,index);
+				if(strcicmp(follow[i], token) == 0){
+					break;
+				}
+				index += strlen(token)+1;
+				token = strtok(NULL, delimit);
+			}
 			char * point=strcasestr(ilke, follow[i]);
-			int index = point - ilke;
 			if (point != NULL) {
 				ilke = memset(ilke,0,(endIndex-beginIndex)+3);
 				strncpy(ilke,messages+beginIndex,index);
@@ -139,21 +150,21 @@ char * servecommand(char *input,  char *out)
 
 		int tmpIndex = *currentIndex + 1;
 		if(!indexes[tmpIndex]){
-			printf("Case 1\n");
+			//printf("Case 1\n");
 			indexes[tmpIndex] = sonIndex;
 		}
 		else if(indexes[tmpIndex] == sonIndex){
-			printf("Case 2\n");
+			//printf("Case 2\n");
 			;
 		}
 		else if(indexes[tmpIndex] > sonIndex)
 		{
-			printf("Case 3\n");
+			//printf("Case 3\n");
 			memset(messages + baslangicIndex, 0, indexes[tmpIndex] - indexes[tmpIndex-1]);
 		}
 		else if(indexes[tmpIndex] < sonIndex)
 		{
-			printf("Case 4\n");
+			//printf("Case 4\n");
 			while(indexes[tmpIndex] && indexes[tmpIndex] < sonIndex){			
 				indexes[tmpIndex] = sonIndex;
 				tmpIndex += 1;
@@ -385,7 +396,7 @@ char * servecommand(char *input,  char *out)
 	{
 		strncpy(out,"NOT SUPPORTED YET\n",BUF_SIZE);
 	}
-
+/*
 	printf("-------------------\n");
 	for(int k = 0; k<10; k ++){
 		printf("%d -",indexes[k]);
@@ -398,7 +409,7 @@ char * servecommand(char *input,  char *out)
 		printf("%c - ",messages[i] );
 	}
 	printf("\n***************************************************************\n");
-
+*/
 	return out;
 }
 	
@@ -414,8 +425,8 @@ void agent(int sockfd)
 	while (1) 	{		
 		memset(buf, 0, BUF_SIZE);
 		nread=recv(mysocket,buf,BUF_SIZE,0);
-    	printf("received: len=%d, content=%s\n",
-		            	nread,buf);
+    	//printf("received: len=%d, content=%s\n",
+		         //   	nread,buf);
 
 		if (nread<0)
 			break;
@@ -463,7 +474,7 @@ int main(int argc, char *argv[])
 	maxtotmesslen = strtol(argv[2], NULL, 10);
 
 	if(ifInt(address)){
-		printf("INET SOCKET\n");
+		//printf("INET SOCKET\n");
 		s = socket(AF_INET, SOCK_STREAM, 0);
 	    if(s == -1) {
 	        fprintf(stderr, "Socket Error\n");
@@ -481,7 +492,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	else{
-		printf("UNIX SOCKET\n");
+		//printf("UNIX SOCKET\n");
 		if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
         perror("server: socket");
         exit(1);
@@ -583,8 +594,8 @@ int main(int argc, char *argv[])
 	sem_init(sem, 1, 1);
 
     while ((ns=accept(s,(struct sockaddr *)&paun,&plen))>=0) {
-	    printf("accepted peer address: len=%d, fam=%d, path=%s\n",
-			            plen,paun.sun_family, paun.sun_path);
+	    //printf("accepted peer address: len=%d, fam=%d, path=%s\n",
+		//	            plen,paun.sun_family, paun.sun_path);
 
 		if (fork())
 		{
