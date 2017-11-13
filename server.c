@@ -71,13 +71,41 @@ int maxtotmesslen;
 int mysocket;
 char **follow;
 sem_t *sem;
+int *lockOrder;
 
+pthread_mutex_t * pmutex = NULL;
+pthread_mutexattr_t attrmutex;
+
+pthread_cond_t * pcond = NULL;
+pthread_condattr_t attrcond;
 
 void *NotifierThread(void *vargp)
 {
 	
 	//printf("UYARILDI\n");
-	sem_wait(sem);
+	//sem_wait(sem);
+	pthread_mutex_lock(pmutex);
+	for (int i = 0; i < MAX_FOLLOWER; ++i)
+	{
+		printf("yer ariyor  ---%d,%d\n",i,lockOrder[i]);
+		if(lockOrder[i] == 0){
+			printf("yerleşti = %d\n",getpid() );
+			lockOrder[i]=getpid();
+			break;
+		}
+	}
+
+	while(1==1){
+		if(lockOrder[0]==getpid()){
+			printf("SIRA BENDE\n");
+			break;
+		}
+		printf("sleeping = %d\n",getpid() );			
+	    pthread_cond_wait(pcond, pmutex);
+	}
+	printf("woke up = %d\n",getpid() );
+	pthread_mutex_unlock(pmutex);
+
 	int beginIndex = indexes[(*currentIndex)-1];
 	int endIndex = indexes[(*currentIndex)];
 
@@ -116,7 +144,22 @@ void *NotifierThread(void *vargp)
 		}
 	}
  	free(ilke);
-	sem_post(sem);   
+	pthread_mutex_lock(pmutex);
+
+	for (int i = 0; i < MAX_FOLLOWER; ++i)
+	{
+		if(lockOrder[i+1] == 0){
+			lockOrder[i]=0;
+			break;
+		}
+		else{
+			lockOrder[i] = lockOrder[i+1];
+		}
+	}
+
+	pthread_cond_broadcast(pcond);
+	pthread_mutex_unlock(pmutex);
+	//sem_post(sem);   
     return NULL;
 }
 
@@ -430,10 +473,58 @@ void agent(int sockfd)
 
 		char * out;
 		out = (char *) malloc(sizeof(char) * BUF_SIZE);
-		sem_wait(sem);
-		servecommand(buf, out);
-		sem_post(sem);
+		//sem_wait(sem);
+		pthread_mutex_lock(pmutex);
+		printf("LOCK ORDER --------------\n");
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			if(lockOrder[i] != 0){
+				printf("%d-",lockOrder[i] );
+			}
+		}
+		printf("LOCK ORDER --------------\n");
 		
+		printf("%d-%d\n",lockOrder[0],getpid() );
+
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			printf("yer ariyor  ---%d,%d\n",i,lockOrder[i]);
+			if(lockOrder[i] == 0){
+				printf("yerleşti = %d\n",getpid() );
+				lockOrder[i]=getpid();
+				break;
+			}
+		}
+
+		while(1==1){
+			if(lockOrder[0]==getpid()){
+				printf("SIRA BENDE\n");
+				break;
+			}
+			printf("sleeping = %d\n",getpid() );			
+		    pthread_cond_wait(pcond, pmutex);
+		}
+		printf("woke up = %d\n",getpid() );
+		pthread_mutex_unlock(pmutex);
+
+		sleep(5);
+		servecommand(buf, out);
+
+		pthread_mutex_lock(pmutex);
+
+		for (int i = 0; i < MAX_FOLLOWER; ++i)
+		{
+			if(lockOrder[i+1] == 0){
+				lockOrder[i]=0;
+				break;
+			}
+			else{
+				lockOrder[i] = lockOrder[i+1];
+			}
+		}
+
+		pthread_cond_broadcast(pcond);
+		pthread_mutex_unlock(pmutex);
 
 		if(strcmp(buf, "BYE") == 0)
 		{
@@ -512,7 +603,8 @@ int main(int argc, char *argv[])
 	}
     
 
-	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex, sharedFollowIndex, sharedFollowCountIndex, sharedSemaphoreIndex;
+	int sharedStartIndexKey, sharedMessagesKey, sharedCurrentIndex, sharedFollowIndex, sharedFollowCountIndex, sharedSemaphoreIndex, sharedCondIndex, sharedMutexIndex;
+	int sharedOrderIndex;
 
 	if ((sharedStartIndexKey=shmget(IPC_PRIVATE,sizeof(int)*maxnmess,IPC_CREAT|0600))<0) {
 		perror("Creating shared mem");
@@ -544,6 +636,22 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
+	if ((sharedCondIndex=shmget(IPC_PRIVATE,sizeof(pthread_cond_t) ,IPC_CREAT|0600))<0) {
+		perror("Creating shared mem");
+		exit(-1);
+	}
+
+	if ((sharedMutexIndex=shmget(IPC_PRIVATE,sizeof(pthread_mutex_t) ,IPC_CREAT|0600))<0) {
+		perror("Creating shared mem");
+		exit(-1);
+	}
+
+	if ((sharedOrderIndex=shmget(IPC_PRIVATE,sizeof(int) * MAX_FOLLOWER,IPC_CREAT|0600))<0) {
+		perror("Creating shared mem");
+		exit(-1);
+	}
+
+
 	if ((indexes=(int *)shmat(sharedStartIndexKey,0,0))==NULL) {
 		perror("Attaching shared mem");
 		exit(-1);
@@ -574,6 +682,21 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
+	if ((pcond=shmat(sharedCondIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
+	if ((pmutex=shmat(sharedMutexIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
+	if ((lockOrder=shmat(sharedOrderIndex,0,0))==NULL) {
+		perror("Attaching shared mem");
+		exit(-1);
+	}
+
 	*currentIndex = 0;
 	*followCount = 0;
 
@@ -585,10 +708,25 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < MAX_FOLLOWER; ++i)
 	{
 		followList[i].pid = 0;
+		lockOrder[i] = 0;
 	}
 
 	//sem = sem_open(SNAME, O_CREAT, 0644, 3); /* Initial value is 3. */
 	sem_init(sem, 1, 1);
+
+	///////////////////////////////////////////
+	pthread_mutexattr_init(&attrmutex);
+	pthread_mutexattr_setpshared(&attrmutex, PTHREAD_PROCESS_SHARED);
+
+	pthread_condattr_init(&attrcond);
+	pthread_condattr_setpshared(&attrcond, PTHREAD_PROCESS_SHARED);
+
+	pthread_mutex_init(pmutex, &attrmutex);
+	pthread_cond_init(pcond, &attrcond);
+
+	pthread_mutex_unlock(pmutex);
+	pthread_cond_broadcast(pcond);
+	///////////////////////////////////////////
 
     while ((ns=accept(s,(struct sockaddr *)&paun,&plen))>=0) {
 	    //printf("accepted peer address: len=%d, fam=%d, path=%s\n",
